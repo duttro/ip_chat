@@ -45,7 +45,7 @@ if __name__ == "__main__":
   
   print >>sys.stderr,"connect to remote host"
   try :
-      s.connect(('192.168.1.123', 5000))
+      s.connect(('192.168.1.126', 5000))
       #self.s.settimeout(None)
   except :
       print >>sys.stderr, 'Unable to connect'
