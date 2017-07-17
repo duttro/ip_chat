@@ -19,7 +19,7 @@ import subprocess
 # 042917 rdutt so the pi zero only has one core
 # 070717 rdutt added update_display for micro display
 
-def update_display(IP):
+def update_display(IP,tx,rx):
   # Create blank image for drawing.
   # Make sure to create image with mode '1' for 1-bit color.
   width = disp.width
@@ -48,8 +48,8 @@ def update_display(IP):
   
   # Write two lines of text.
   draw.text((x, top),       "IP: " + str(IP),  font=font, fill=255)
-  #draw.text((x, top+8),     str(CPU), font=font, fill=255)
-  #draw.text((x, top+16),    str(MemUsage),  font=font, fill=255)
+  draw.text((x, top+8),     tx, font=font, fill=255)
+  draw.text((x, top+16),    rx, font=font, fill=255)
   #draw.text((x, top+25),    str(Disk),  font=font, fill=255)
   
   # Display image.
@@ -69,24 +69,31 @@ def talk(s, r_q, t_q):
   # Get the list sockets which are readable
   read_sockets, write_sockets, error_sockets = select.select(socket_list , [], [])
 
-  for sock in read_sockets:
-    #incoming message from remote server
-    if sock == s:
-      data = sock.recv(4096)
-      if not data :
-          print >>sys.stderr, '\nDisconnected from chat server'
-          sys.exit()
-      else :
-          #print data
-          #print >>sys.stderr,"comloop recv %s"%(data)
-          r_q.put(data);
+  if not disconnected:
+    for sock in read_sockets:
+      #incoming message from remote server
+      if sock == s:
+        data = sock.recv(4096)
+        if not data :
+            print >>sys.stderr, '\nDisconnected from chat server'
+            return True
+        else :
+            #print data
+            #print >>sys.stderr,"comloop recv %s"%(data)
+            r_q.put(data);
+            return False
+  else:
+    return False        
     
 ######################################################################
 #main function
 if __name__ == "__main__":
+  disconnected = True
+  
   #################################################################
   # Raspberry Pi pin configuration:
   RST = None     # on the PiOLED this pin isnt used
+  
   # Note the following are only used with SPI:
   DC = 23
   SPI_PORT = 0
@@ -105,7 +112,9 @@ if __name__ == "__main__":
   # Shell scripts for system monitoring from here : https://unix.stackexchange.com/questions/119126/command-to-display-memory-usage-disk-usage-and-cpu-load
   cmd = "hostname -I | cut -d\' \' -f1"
   IP = subprocess.check_output(cmd, shell = True )
-  update_display(IP)
+  tx="tx"
+  rx="rx"
+  update_display(IP,tx,rx)
   #################################################################
   print >>sys.stderr, 'setup queues';
   r_queue = Queue.Queue()
@@ -117,17 +126,29 @@ if __name__ == "__main__":
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   s.settimeout(20)
   
-  print >>sys.stderr,"connect to remote host"
-  try :
-      s.connect(('192.168.1.126', 5000))
-      #self.s.settimeout(None)
-  except :
-      print >>sys.stderr, 'Unable to connect'
-      sys.exit()
+  
 
   while 1:    
+    if disconnected :
+      print >>sys.stderr,"connect to remote host"
+      try :
+          s.connect(('192.168.1.126', 5000))
+          disconnected == False
+          #self.s.settimeout(None)
+      except :
+          print >>sys.stderr, 'Unable to connect'
+          disconnected = True
+          #sys.exit()
+    
+    
+    
+    
+    
+    
     if not r_queue.empty():
       r_msg = r_queue.get()
+      rx=str(r_msg).split('>')[1]
+      update_display(IP,tx,rx)
       print >>sys.stderr, "MAINloop recv "
       print >>sys.stderr, "%s"%(r_msg)
     else :
@@ -135,9 +156,11 @@ if __name__ == "__main__":
 
       if (i):
         message =  sys.stdin.readline().strip()
+        tx=str(message).split('>')[1]
+        update_display(IP,tx,rx)
         t_queue.put(message)
     
-    talk(s, r_queue, t_queue)
+    disconnected = talk(s, r_queue, t_queue)
        
     time.sleep(.25);
     
